@@ -15,7 +15,7 @@ import sys,os
 import io
 import numpy as np
 import logging
-logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG, filename = 'probing_neighbour_value')
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG ,filename = 'print_loss.log')
 #logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 #logging.info('test')
 
@@ -106,10 +106,10 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer):
         #print ('input_ids', input_ids)
         
         key_word_index = [i for i in range(len(input_ids)) if input_ids[i] == key_word_id]
-        if key_word_index[0] == 1:
-            key_word_index[0] += 1
-        else:
-            key_word_index[0] -= 1
+        #if key_word_index[0] == 1:
+        #    key_word_index[0] += 1
+        #else:
+        #    key_word_index[0] -= 1
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
         input_mask = [1] * len(input_ids)
@@ -266,11 +266,15 @@ def main(head_no = None, layer_no = -1):
     print(results)
 
 if __name__ == "__main__":
-    for layer_no in range(12):
+    for layer_no in range(1,12):
+        main(head_no = None, layer_no = layer_no)
+        main(head_no = 'random', layer_no = layer_no)
         for head_no in range(12):
             main(head_no, layer_no)
-#    main()
-    main('random')
+        
+    
+    #for layer_no in range(1):
+       
     
     
     

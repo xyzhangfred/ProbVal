@@ -126,6 +126,29 @@ class PyTorchClassifier(object):
                 correct += pred.long().eq(ybatch.data.long()).sum().item()
             accuracy = 1.0 * correct / len(devX)
         return accuracy
+    
+    def avg_loss(self, devX, devy):
+        self.model.eval()
+        avg_loss = 0
+        all_costs = []
+        if not isinstance(devX, torch.cuda.FloatTensor) or self.cudaEfficient:
+            devX = torch.FloatTensor(devX).cuda()
+            devy = torch.LongTensor(devy).cuda()
+        with torch.no_grad():
+            for i in range(0, len(devX), self.batch_size):
+                Xbatch = devX[i:i + self.batch_size]
+                ybatch = devy[i:i + self.batch_size]
+                if self.cudaEfficient:
+                    Xbatch = Xbatch.cuda()
+                    ybatch = ybatch.cuda()
+                output = self.model(Xbatch)
+                loss = self.loss_fn(output, ybatch)
+                all_costs.append(loss.data.item()/self.batch_size)
+            avg_loss = np.mean(all_costs)
+                #pred = output.data.max(1)[1]
+                #correct += pred.long().eq(ybatch.data.long()).sum().item()
+            #accuracy = 1.0 * correct / len(devX)
+        return avg_loss
 
     def predict(self, devX):
         self.model.eval()

@@ -193,7 +193,7 @@ def batcher(params, batch):
     return embeddings
 
 
-def main(head_no = None, layer_no = -1):
+def main(head_no = 0, layer_no = -1):
 
     ###load models
     
@@ -273,7 +273,10 @@ def main(head_no = None, layer_no = -1):
             all_sents.append(sent_words)
     
     batch_size = 128
-    all_embeddings = np.empty((0,64))
+    if head_no != None:
+        all_embeddings = np.empty((0,64))
+    else:
+        all_embeddings = np.empty((0,768))
 
     for i in range(int(np.ceil(len(all_sents)/batch_size))):
         embeddings = batcher(params_senteval,all_sents[batch_size * i: min(batch_size*(i+1) , len(all_sents))])
@@ -309,9 +312,12 @@ def main(head_no = None, layer_no = -1):
     for i,t in enumerate(rand_tokens):
         plt.scatter(embedded[i * 120:(i+1) * 120, 0],embedded[i * 120:(i+1) * 120, 1], c=[colors[i]])
 
-    sent1 = "His fingers graze the starchy fabric of the only outfit I 'll ever own and I manage to exhale . fabric".split(' ')
-    sent2 = "She 'd never touched fabric so soft . fabric".split(' ')
-    batch = [sent1,sent2]
+#    sent1 = "His fingers graze the starchy fabric of the only outfit I 'll ever own and I manage to exhale . fabric"
+#    sent2 = "She 'd never touched fabric so soft . fabric"
+
+    sent1 = "I love bananas . bananas"
+    sent2 = "I love movies . movies"
+    batch = [sent1.split(' '),sent2.split(' ')]
     sims = []
     for l in range(12):
         sims.append([])
@@ -321,8 +327,22 @@ def main(head_no = None, layer_no = -1):
             embeddings = batcher(params_senteval, batch)
             sim = sklearn.metrics.pairwise.cosine_similarity(embeddings)[0][1]
             sims[l].append(sim)
-        
-        
+
+
+    raw_sent = "I love bananas .".split(' ')
+    #sent2 = "I love movies . movies"
+    reps = []
+    l = 11 
+    h = 5
+    params_senteval['bert'].layer_no = l
+    params_senteval['bert'].head_no = h
+    for i in range(len(raw_sent)):
+        sent = raw_sent
+        sent.append(raw_sent[i])
+        batch = [sent]
+        reps.append(batcher(params_senteval, batch))
+    reps = np.asanyarray(reps).reshape((-1,64))
+    sim = sklearn.metrics.pairwise.cosine_similarity(reps)
         
 #if __name__ == "__main__":
 ##    for layer_no in range(12):

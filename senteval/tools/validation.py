@@ -243,4 +243,11 @@ class SplitClassifier(object):
 
         testaccuracy = clf.score(self.X['test'], self.y['test'])
         testaccuracy = round(100*testaccuracy, 2)
+        
+        avg_loss = clf.avg_loss(self.X['test'], self.y['test'])
+        
+        ##calculate average cross-entropy loss
+        logging.info('Test : acc =  {0} with average loss \
+            {1}'.format(testaccuracy, avg_loss))
+        
         return devaccuracy, testaccuracy
