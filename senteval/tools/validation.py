@@ -104,7 +104,14 @@ class InnerKFoldClassifier(object):
 
         devaccuracy = round(np.mean(self.devresults), 2)
         testaccuracy = round(np.mean(self.testresults), 2)
-        return devaccuracy, testaccuracy
+        
+        avg_loss = clf.avg_loss(self.X['test'], self.y['test'])
+        
+        ##calculate average cross-entropy loss
+        logging.info('Test : acc =  {0} with average loss \
+            {1}'.format(testaccuracy, avg_loss))
+        
+        return devaccuracy, testaccuracy, avg_loss
 
 
 class KFoldClassifier(object):
@@ -177,6 +184,7 @@ class KFoldClassifier(object):
 
         testaccuracy = clf.score(self.test['X'], self.test['y'])
         testaccuracy = round(100*testaccuracy, 2)
+        
 
         return devaccuracy, testaccuracy, yhat
 
@@ -250,4 +258,4 @@ class SplitClassifier(object):
         logging.info('Test : acc =  {0} with average loss \
             {1}'.format(testaccuracy, avg_loss))
         
-        return devaccuracy, testaccuracy
+        return devaccuracy, testaccuracy, avg_loss
