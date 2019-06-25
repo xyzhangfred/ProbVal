@@ -58,7 +58,7 @@ class InnerKFoldClassifier(object):
         logging.info('Training {0} with (inner) {1}-fold cross-validation'
                      .format(self.modelname, self.k))
 
-        regs = [10**t for t in range(-5, -1)] if self.usepytorch else \
+        regs = [10**t for t in [-5,-2]] if self.usepytorch else \
                [2**t for t in range(-2, 4, 1)]
         skf = StratifiedKFold(n_splits=self.k, shuffle=True, random_state=1111)
         innerskf = StratifiedKFold(n_splits=self.k, shuffle=True,

@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon May 27 19:38:28 2019
+Created on Mon Jun 24 20:33:55 2019
 
 @author: xiongyi
-
-Read in a batch of sentences and return the z vectors outputed by a certain layer
-(either concatenated or of a single head.)
-
 """
+
 from __future__ import absolute_import, division, unicode_literals
 
 import sys,os
 import io
 import numpy as np
 import logging
-logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG ,filename = 'print_loss.log')
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG, filename = 'TraceWord')
 #logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 #logging.info('test')
 
@@ -38,14 +35,14 @@ sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
 
 # Set up logger
-params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 5}
-params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 32,
-                             'tenacity': 3, 'epoch_size': 2}
+params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 2}
+params_senteval['classifier'] = {'nhid': 100, 'optim': 'adam', 'batch_size': 32,
+                             'tenacity': 3, 'epoch_size': 4, 'kfold':3}
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
 
-    def __init__(self, unique_id, text_a, text_b=None, key_word = None):
+    def __init__(self, unique_id, text_a, text_b=None):
         """Constructs a InputExample.
 
         Args:
@@ -60,23 +57,20 @@ class InputExample(object):
         self.unique_id = unique_id
         self.text_a = text_a
         self.text_b = text_b
-        self.key_word = key_word
 
 
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, key_word_index):
+    def __init__(self, input_ids, input_mask, segment_ids):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        self.key_word_index = key_word_index
         
 def convert_examples_to_features(examples, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
     features = []
     for (ex_index, example) in enumerate(examples):
-        key_word = example.key_word
         tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None
@@ -98,18 +92,11 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer):
             segment_ids += [1] * (len(tokens_b) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        key_word_id = tokenizer.convert_tokens_to_ids([key_word])[0]
 
         #print ('tokens', tokens)
-        #print ('key_word ', key_word)
-        #print ('key_word_id', key_word_id)
         #print ('input_ids', input_ids)
         
-        key_word_index = [i for i in range(len(input_ids)) if input_ids[i] == key_word_id]
-        #if key_word_index[0] == 1:
-        #    key_word_index[0] += 1
-        #else:
-        #    key_word_index[0] -= 1
+
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
         input_mask = [1] * len(input_ids)
@@ -127,10 +114,11 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer):
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
-                              segment_ids=segment_ids, 
-                              key_word_index=key_word_index))
+                              segment_ids=segment_ids))
     return features
-       
+     
+
+###new task!
 
 # SentEval prepare and batcher
 def prepare(params, samples):
@@ -142,7 +130,7 @@ def batcher(params, batch, labels):
     #print ('batch[0]' ,batch[0])
 
     #assert len(batch[0]) == 2, 'batch format error'
-    batch = [ (' '.join(dat[:-1]).lower() , dat[-1].lower()) for dat in batch   if dat != [] ]
+    batch = [ ' '.join(dat) for dat in batch if dat != [] ]
     #print ('batch size' ,len(batch[0]))
     #print ('batch[0]' ,batch[0])
     #print ('batch', batch)
@@ -150,12 +138,11 @@ def batcher(params, batch, labels):
     unique_id = 0
     #print ('batch size ', len(batch))
     for dat in batch:
-        key_word = dat[1]
-        sent = dat[0].strip()
+        sent = dat.strip()
         text_b = None
         text_a = sent
         examples.append(
-            InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b, key_word= key_word))
+            InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
         unique_id += 1
         
     
@@ -163,7 +150,7 @@ def batcher(params, batch, labels):
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long).to(params['bert'].device)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long).to(params['bert'].device)
      
-    ###get z_vec
+    ###get z_vec.detach().cpu().numpy()
     #get the output of previous layer
     if params['bert'].layer_no > 0:
         all_encoder_layers, _ = params['bert'](all_input_ids, token_type_ids=None, attention_mask=all_input_mask)
@@ -184,29 +171,38 @@ def batcher(params, batch, labels):
     
     if params['bert'].head_no is not None:
         if params['bert'].head_no == 'random':
-            embeddings = embeddings[:, params['bert'].randidx]
+            embeddings = embeddings[:,:,params['bert'].randidx]
         else:
             embeddings = embeddings[:,:,64 * params['bert'].head_no : 64 * (params['bert'].head_no +1)]
     #print ('befor shape', embeddings.shape)
+    word_embedding = params_senteval['bert'].embeddings(all_input_ids, token_type_ids=None).detach().cpu().numpy()
     new_emb = []
     for i in range(len(batch)):
-        sent_len = all_input_mask
+        sent_len = sum(all_input_mask[i])
         if sent_len < 2:
             continue
         if labels[i] == 1:
-            for t in range(sent_len):
-                new_emb.append(np.asanyarray(embeddings[i,t,:]))
+            t = np.random.randint(1,sent_len)
+            w_e = word_embedding[i,t,:]
+            c_e = embeddings[i,t,:]
+            
+            token_emb = np.concatenate((w_e, c_e), axis = 0)
+            #print ('token_emb shape', token_emb.shape)
+            new_emb.append(token_emb)
         else:
-            for t in range(sent_len):
-                not_t = np.random.choice([x for x in range(sent_len) if x != t],size = 1)
-                new_emb.append(np.asanyarray(embeddings[i,not_t,:]))
+            t = np.random.randint(1,sent_len)
+            w_e = word_embedding[i,t,:]
+            not_t = np.random.choice([x for x in range(sent_len) if x != t],size = 1)[0]
+            c_e = embeddings[i,not_t,:]
+            token_emb = np.concatenate((w_e, c_e), axis = 0)
+            #print ('token_emb shape', token_emb.shape)
+            new_emb.append(token_emb)
     
     ###concatenate back with the original word embedding of the word!            
-                
-    
+    #print ('word_embedding shape', word_embedding.shape)
+    #print ('np.asanyarray(new_emb) shape', np.asanyarray(new_emb).shape)
     embeddings = np.asanyarray(new_emb)
     #print ('befor shape', embeddings.shape)
-   
     #print ('after shape', embeddinglayer_nos.shape)
 
     #print ('embeddings.shape ', embeddings.shape)
@@ -215,8 +211,24 @@ def batcher(params, batch, labels):
     return embeddings
 
 
+
 def main(head_no = None, layer_no = -1):
     
+    logging.info('\nDoing head number '+str(head_no) + '!\n')
+
+    
+    params_senteval['bert'].layer_no = layer_no
+    params_senteval['bert'].head_no = head_no
+    
+    params_senteval['bert'].tokenizer = tokenizer
+    params_senteval['bert'].device = device
+    params_senteval['bert'].randidx = np.random.choice(np.arange(768), size = 64, replace=False)
+    se = senteval.engine.SE(params_senteval, batcher, prepare)
+    transfer_tasks = ['TraceWord']
+    results = se.eval(transfer_tasks)
+    print('results for head ', head_no, ' layer ', layer_no, results)
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     ## Required parameters
@@ -240,7 +252,7 @@ def main(head_no = None, layer_no = -1):
 
     parser.add_argument("--batch_size", default=16, type=int, help="Batch size for predictions.")
 
-    args = parser.parse_args(['--local_rank', '1', '--layer_no', str(layer_no)])
+    args = parser.parse_args(['--local_rank', '1', '--do_lower_case'])
     
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -250,44 +262,32 @@ def main(head_no = None, layer_no = -1):
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         #torch.distributed.init_process_group(backend='nccl')
-    logging.info('\nDoing head number '+str(head_no) + '!\n')
     model = BertModel.from_pretrained(args.bert_model)
     model.to(device)
+    
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+
 #    if args.local_rank != -1:
 #        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
 #                                                          output_device=args.local_rank)
 #    elif n_gpu > 1:
 #        model = torch.nn.DataParallel(model)
     
-    
     if n_gpu > 1:
         model = torch.nn.DataParallel(model)
         params_senteval['bert'] = next(model.children())
     else:
         params_senteval['bert'] = model
-    model.eval()
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    
-    params_senteval['bert'].layer_no = args.layer_no
     params_senteval['bert'].seq_length = args.max_seq_length
-    params_senteval['bert'].head_no = head_no
-    
-    params_senteval['bert'].tokenizer = tokenizer
-    params_senteval['bert'].device = device
-    params_senteval['bert'].randidx = np.random.choice(np.arange(768), size = 64, replace=False)
-    se = senteval.engine.SE(params_senteval, batcher, prepare)
-    transfer_tasks = ['WordContentWithV']
-    results = se.eval(transfer_tasks)
-    print(results)
 
-if __name__ == "__main__":
-    for layer_no in range(1,12):
+    model.eval()
+    for layer_no in range(0,12):
         main(head_no = None, layer_no = layer_no)
         main(head_no = 'random', layer_no = layer_no)
         for head_no in range(12):
             main(head_no, layer_no)
         
-    
+
     #for layer_no in range(1):
        
     

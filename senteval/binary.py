@@ -34,6 +34,37 @@ class BinaryClassifierEval(object):
         with io.open(fpath, 'r', encoding='latin-1') as f:
             return [line.split() for line in f.read().splitlines()]
 
+    def run_old(self, params, batcher):
+        enc_input = []
+        # Sort to reduce padding
+        sorted_corpus = sorted(zip(self.samples, self.labels),
+                               key=lambda z: (len(z[0]), z[1]))
+        sorted_samples = [x for (x, y) in sorted_corpus]
+        sorted_labels = [y for (x, y) in sorted_corpus]
+        logging.info('Generating sentence embeddings')
+        
+        ######rewrite this part!
+        
+        
+        for ii in range(0, self.n_samples, params.batch_size):
+            batch = sorted_samples[ii:ii + params.batch_size]
+            embeddings = batcher(params, batch)
+            enc_input.append(embeddings)
+        enc_input = np.vstack(enc_input)
+        logging.info('Generated sentence embeddings')
+
+        config = {'nclasses': 2, 'seed': self.seed,
+                  'usepytorch': params.usepytorch,
+                  'classifier': params.classifier,
+                  'nhid': params.nhid, 'kfold': params.kfold}
+        clf = InnerKFoldClassifier(enc_input, np.array(sorted_labels), config)
+        devacc, testacc = clf.run()
+        logging.debug('Dev acc : {0} Test acc : {1}\n'.format(devacc, testacc))
+        return {'devacc': devacc, 'acc': testacc, 'ndev': self.n_samples,
+                'ntest': self.n_samples}
+        
+    
+    
     def run(self, params, batcher):
         enc_input = []
         # Sort to reduce padding
@@ -42,9 +73,13 @@ class BinaryClassifierEval(object):
         sorted_samples = [x for (x, y) in sorted_corpus]
         sorted_labels = [y for (x, y) in sorted_corpus]
         logging.info('Generating sentence embeddings')
+        
+        ######rewrite this part!
+        
         for ii in range(0, self.n_samples, params.batch_size):
             batch = sorted_samples[ii:ii + params.batch_size]
-            embeddings = batcher(params, batch)
+            labels = sorted_labels[ii:ii + params.batch_size]
+            embeddings = batcher(params, batch, labels)
             enc_input.append(embeddings)
         enc_input = np.vstack(enc_input)
         logging.info('Generated sentence embeddings')
@@ -90,3 +125,22 @@ class MPQAEval(BinaryClassifierEval):
         pos = self.loadFile(os.path.join(task_path, 'mpqa.pos'))
         neg = self.loadFile(os.path.join(task_path, 'mpqa.neg'))
         super(self.__class__, self).__init__(pos, neg, seed)
+
+
+
+
+
+class TraceWordEval(BinaryClassifierEval):
+    def __init__(self, task_path, seed=1111):
+        logging.debug('***** Transfer task : TraceWord *****\n\n')
+        
+        pos = self.loadFile(os.path.join(task_path, 'TraceWord'))
+        neg = self.loadFile(os.path.join(task_path, 'TraceWord'))
+        super(self.__class__, self).__init__(pos, neg, seed)
+
+
+
+
+
+
+
