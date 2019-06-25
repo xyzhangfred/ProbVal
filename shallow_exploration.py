@@ -127,8 +127,6 @@ def get_reps(params, batch):
     model = params['bert']
     #assert len(batch[0]) == 2, 'batch format error'
 
-    
-
     #print ('batch size' ,len(batch[0]))
     #print ('batch[0]' ,batch[0])
     #print ('batch', batch)

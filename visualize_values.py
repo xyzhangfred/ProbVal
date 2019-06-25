@@ -220,7 +220,7 @@ def main(head_no = 0, layer_no = -1):
 
     parser.add_argument("--batch_size", default=16, type=int, help="Batch size for predictions.")
 
-    args = parser.parse_args(['--local_rank', '1', '--layer_no', str(layer_no)])
+    args = parser.parse_args(['--local_rank', '0', '--layer_no', str(layer_no)])
     
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -260,76 +260,117 @@ def main(head_no = 0, layer_no = -1):
       
     ### read file
     file_path = os.path.join(PATH_TO_DATA, 'probing/word_content_addw.txt')
+
     with (open (file_path, 'r')) as f:
         lines = f.readlines()
         tokens = []
+        
         all_sents = []
+        sent_by_tok = {}
         for line in lines:
             data = line.split('\t')
             key = data[1]
             tokens.append(key)
+            if key not in sent_by_tok.keys():
+                sent_by_tok[key] = []
+            
+            
             sent = data[-1]
             sent_words = sent.split(' ')
             all_sents.append(sent_words)
-    
-    batch_size = 128
-    if head_no != None:
-        all_embeddings = np.empty((0,64))
-    else:
-        all_embeddings = np.empty((0,768))
-
-    for i in range(int(np.ceil(len(all_sents)/batch_size))):
-        embeddings = batcher(params_senteval,all_sents[batch_size * i: min(batch_size*(i+1) , len(all_sents))])
-        all_embeddings = np.append(all_embeddings, embeddings, axis = 0)
+            sent_by_tok[key].append(sent_words)
 
     
-    uniq_tokens = {}
-    for i,t in enumerate(tokens):
-        if t not in uniq_tokens.keys():
-            uniq_tokens [t] = []
-        uniq_tokens[t].append(all_embeddings[i])
+    rand_tokens = np.random.choice(list(sent_by_tok.keys()),size = 10, replace = False)
+    all_sims = []
+    for t in rand_tokens:
+        print ('    ' ,t)
+        sents = sent_by_tok[t][:50]
+
+        sims = []
+        for l in range(12):
+            sims.append([])
+            params_senteval['bert'].layer_no = l
+            params_senteval['bert'].head_no = None
+            embeddings = batcher(params_senteval, sents)
+            sim = np.mean(sklearn.metrics.pairwise.cosine_similarity(embeddings))
+            #print ('average sim ', sim)
+            sims[l].append(sim)
+            for h in range(12):
+                params_senteval['bert'].head_no = h
+                embeddings = batcher(params_senteval, sents)
+                sim = np.mean(sklearn.metrics.pairwise.cosine_similarity(embeddings))
+                #print ('average sim ', sim)
+                sims[l].append(sim)
+        all_sims.append(sims)
+    average_by_token = np.mean(np.asanyarray(all_sims), axis = 0)
+    return all_sims
 
 
-    for t in uniq_tokens.keys():
-        uniq_tokens[t] = np.asanyarray(uniq_tokens[t])
-        
-        
-    ###visualize 20 tokens        
-    rand_tokens = np.random.choice(list(uniq_tokens.keys()),size = 20, replace = False)
-    selected_vals = [uniq_tokens[t] for t in rand_tokens]
-    mixed_vals = np.vstack(selected_vals)
-    
-    from sklearn.manifold import TSNE
-    embedded = TSNE(n_components=2).fit_transform(mixed_vals)
-
-
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-
-    colors = sns.color_palette("hls", 20)
-
-    for i,t in enumerate(rand_tokens):
-        plt.scatter(embedded[i * 120:(i+1) * 120, 0],embedded[i * 120:(i+1) * 120, 1], c=[colors[i]])
+#    batch_size = 32
+#    if head_no != None:
+#        all_embeddings = np.empty((0,64))
+#    else:
+#        all_embeddings = np.empty((0,768))
+#
+#    for i in range(int(np.ceil(len(all_sents)/batch_size))):
+#        print ('doing batch ', i)
+#        embeddings = batcher(params_senteval,all_sents[batch_size * i: min(batch_size*(i+1) , len(all_sents))])
+#        all_embeddings = np.append(all_embeddings, embeddings, axis = 0)
+#
+#    
+#    for i,t in enumerate(tokens):
+#        if t not in uniq_tokens.keys():
+#            uniq_tokens [t] = []
+#        uniq_tokens[t].append(all_embeddings[i])
+#
+#
+#    for t in uniq_tokens.keys():
+#        uniq_tokens[t] = np.asanyarray(uniq_tokens[t])
+#        
+#        
+#    ###visualize 20 tokens        
+#    rand_tokens = np.random.choice(list(uniq_tokens.keys()),size = 20, replace = False)
+#    selected_vals = [uniq_tokens[t] for t in rand_tokens]
+#    mixed_vals = np.vstack(selected_vals)
+#    
+#    from sklearn.manifold import TSNE
+#    embedded = TSNE(n_components=2).fit_transform(mixed_vals)
+#
+#
+#    import matplotlib.pyplot as plt
+#    import seaborn as sns
+#
+#
+#    colors = sns.color_palette("hls", 20)
+#
+#    for i,t in enumerate(rand_tokens):
+#        plt.scatter(embedded[i * 120:(i+1) * 120, 0],embedded[i * 120:(i+1) * 120, 1], c=[colors[i]])
 
 #    sent1 = "His fingers graze the starchy fabric of the only outfit I 'll ever own and I manage to exhale . fabric"
 #    sent2 = "She 'd never touched fabric so soft . fabric"
 
-    sent1 = "I love bananas . bananas"
-    sent2 = "I love movies . movies"
+def pairwise():
+    sent1 = "I went to the store to buy some bananas . bananas"
+    sent2 = "I went to the store to buy some movies . movies"
     batch = [sent1.split(' '),sent2.split(' ')]
     sims = []
     for l in range(12):
         sims.append([])
         params_senteval['bert'].layer_no = l
+        params_senteval['bert'].head_no = None
+        embeddings = batcher(params_senteval, batch)
+        sim = sklearn.metrics.pairwise.cosine_similarity(embeddings)[0][1]
+        sims[l].append(sim)
         for h in range(12):
             params_senteval['bert'].head_no = h
             embeddings = batcher(params_senteval, batch)
             sim = sklearn.metrics.pairwise.cosine_similarity(embeddings)[0][1]
             sims[l].append(sim)
+    sims = np.asanyarray(sims)
 
 
-    raw_sent = "I love bananas .".split(' ')
+    raw_sent = "I went to the store to buy some bananas . ".split(' ')
     #sent2 = "I love movies . movies"
     reps = []
     l = 11 
@@ -345,11 +386,11 @@ def main(head_no = 0, layer_no = -1):
     sim = sklearn.metrics.pairwise.cosine_similarity(reps)
         
 #if __name__ == "__main__":
-##    for layer_no in range(12):
-##        for head_no in range(12):
-##            main(head_no, layer_no)
-##    main()
-##    main('random')
-#
+###    for layer_no in range(12):
+###        for head_no in range(12):
+###            main(head_no, layer_no)
+###    main()
+###    main('random')
+##
 #    main(0, 2)
     
